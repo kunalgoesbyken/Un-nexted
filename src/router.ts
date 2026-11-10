@@ -38,7 +38,8 @@ class Router {
 
     try {
       const glob = new Bun.Glob('**/*.tsx');
-      for (const file of glob.scanSync({ cwd: PAGES_DIR })) {
+      for (const scanned of glob.scanSync({ cwd: PAGES_DIR })) {
+        const file = scanned.replaceAll('\\', '/');
         // Skip _app.tsx and _document.tsx
         if (file !== '_app.tsx' && file !== '_document.tsx' && !file.includes('/_')) {
           files.push(file);
@@ -92,18 +93,16 @@ class Router {
   private buildRouteRegex(pattern: string): { regex: RegExp; paramNames: string[] } {
     const paramNames: string[] = [];
 
-    // Escape special regex characters except for our dynamic segments
-    let regexStr = pattern
-      // Replace dynamic segments [param] with named capture groups
-      .replace(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/g, (_, paramName) => {
-        paramNames.push(paramName);
+    const regexStr = pattern
+      .split(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/)
+      .map((part, index) => {
+        if (index % 2 === 0) {
+          return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        paramNames.push(part);
         return '([^/]+)';
       })
-      // Escape special regex characters
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-      // Fix the capture groups we just added (we escaped them)
-      .replace(/\\\([^/]+\\\)/g, '([^/]+)')
-      // Allow trailing slash
+      .join('')
       .replace(/\/$/, '/?');
 
     return {

@@ -51,7 +51,8 @@ graph TD
 ```
 
 1.  **The Build Step (Bundler):**
-    *   Uses `Bun.build` to compile client-side code.
+    *   Uses `Bun.build` to compile client-side code on React 18.
+    *   Generates a page map (`unnexted:pages`) so every page is its own lazily loaded chunk.
     *   Separates server-only logic (secrets, DB calls) from client bundles.
 2.  **The Server (SSR):**
     *   Interlopes requests and matches URLs to file paths.
@@ -60,7 +61,7 @@ graph TD
 3.  **The Transport:**
     *   Injects initial data (`__UNNEXTED_DATA__`) into the HTML window object so the client doesn't need to refetch data.
 4.  **The Client (Hydration):**
-    *   The browser loads the JS bundle.
+    *   The browser loads the JS bundle and the chunk for the current page.
     *   React reads the server-rendered HTML and attaches event listeners (Hydration).
 
 ***
@@ -75,7 +76,7 @@ bun install
 bun run dev
 ```
 
-Visit `http://localhost:3000`.
+Visit `http://localhost:3000`. Set `PORT` to use another port.
 
 ### Explore the Demos
 | Route | Feature Demonstrated |
@@ -92,13 +93,16 @@ Every file has a specific purpose in the pipeline:
 
 ```text
 src/
-├── app/
-│   ├── server.ts      # The HTTP server (matches URL -> Page)
-│   ├── router.ts      # The "Magic": Scans filesystem to build route map
-│   ├── build.ts       # The Bundler: Compiles client.tsx for the browser
-│   └── client.tsx     # The Entry Point: Runs in browser to hydrate DOM
+├── server.ts          # The HTTP server (matches URL -> Page)
+├── router.ts          # The "Magic": Scans filesystem to build route map
+├── build.ts           # The Bundler: Compiles client.tsx and every page for the browser
+├── client.tsx         # The Entry Point: Runs in browser to hydrate DOM
+├── pages.d.ts         # Types for the generated unnexted:pages module
 ├── pages/             # Your application code (Next.js style)
 │   ├── index.tsx
+│   ├── about.tsx
+│   ├── users.tsx
+│   ├── 404.tsx
 │   └── blog/
 │       └── [slug].tsx # Dynamic route example
 └── types.ts

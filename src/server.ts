@@ -5,27 +5,24 @@
 
 import { renderToString } from 'react-dom/server';
 import { createElement } from 'react';
-import { initRouter, matchRoute, getRoutes } from './router.js';
+import path from 'path';
+import { initRouter, matchRoute } from './router.js';
 import type { PageComponent, ServerPropsContext } from './types.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const NOT_FOUND_PAGE = './src/pages/404.tsx';
+const DIST_DIR = path.join(import.meta.dir, '..', 'dist');
 
 /**
  * Generate HTML template with rendered content
  */
 function generateHTML(
   renderedContent: string,
-  data: { pathname: string; props: Record<string, any> },
+  data: { pathname: string; props: Record<string, any>; filePath?: string },
   options: { title?: string } = {}
 ): string {
   const { title = 'Unnexted App' } = options;
-
-  // Serialize routes for client-side matching
-  const routes = getRoutes().map((r) => ({
-    pattern: r.pattern,
-    filePath: r.filePath,
-  }));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -37,8 +34,7 @@ function generateHTML(
   <body>
     <div id="root">${renderedContent}</div>
     <script id="__UNNEXTED_DATA__" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
-    <script id="__UNNEXTED_ROUTES__" type="application/json">${JSON.stringify(routes).replace(/</g, '\\u003c')}</script>
-    <script src="/client.js"></script>
+    <script type="module" src="/client.js"></script>
   </body>
 </html>`;
 }
@@ -75,12 +71,16 @@ async function renderPage(pathname: string): Promise<{ html: string; status: num
     // 404 page
     console.log(`[Server] No route matched: ${pathname}`);
 
-    const NotFoundComponent = await getPageComponent('./src/pages/404.tsx');
+    const NotFoundComponent = await getPageComponent(NOT_FOUND_PAGE);
 
     if (NotFoundComponent) {
       const renderedContent = renderToString(createElement(NotFoundComponent as any, { pathname }));
       return {
-        html: generateHTML(renderedContent, { pathname, props: {} }, { title: '404 - Not Found' }),
+        html: generateHTML(
+          renderedContent,
+          { pathname, props: { pathname }, filePath: NOT_FOUND_PAGE },
+          { title: '404 - Not Found' }
+        ),
         status: 404,
       };
     }
@@ -146,7 +146,7 @@ async function renderPage(pathname: string): Promise<{ html: string; status: num
   const title = (props as any).title || (props as any).metadata?.title || 'Unnexted App';
 
   return {
-    html: generateHTML(renderedContent, { pathname, props }, { title }),
+    html: generateHTML(renderedContent, { pathname, props, filePath: route.filePath }, { title }),
     status: 200,
   };
 }
@@ -155,22 +155,17 @@ async function renderPage(pathname: string): Promise<{ html: string; status: num
  * Serve static files from dist directory
  */
 async function serveStatic(pathname: string): Promise<Response | null> {
-  if (pathname === '/client.js') {
-    try {
-      const file = Bun.file('./dist/client.js');
-      return new Response(file, {
-        headers: {
-          'Content-Type': 'application/javascript; charset=utf-8',
-          'Cache-Control': IS_DEV ? 'no-cache' : 'public, max-age=31536000',
-        },
-      });
-    } catch (e) {
-      console.error('[Server] Failed to serve client.js:', e);
-      return null;
-    }
+  const file = Bun.file(path.join(DIST_DIR, path.basename(pathname)));
+
+  if (!(await file.exists())) {
+    return null;
   }
 
-  return null;
+  return new Response(file, {
+    headers: {
+      'Cache-Control': IS_DEV ? 'no-cache' : 'public, max-age=31536000',
+    },
+  });
 }
 
 /**
@@ -194,7 +189,7 @@ export async function startServer(): Promise<void> {
       const pathname = url.pathname;
 
       // Serve static files
-      if (pathname.startsWith('/client.js') || pathname.startsWith('/static/')) {
+      if (pathname.endsWith('.js') || pathname.endsWith('.js.map')) {
         const staticResponse = await serveStatic(pathname);
         if (staticResponse) {
           return staticResponse;
@@ -218,7 +213,7 @@ export async function startServer(): Promise<void> {
 }
 
 // Start server if this file is run directly
-if (import.meta.path === Bun.resolveSync('./server.ts', import.meta.dir)) {
+if (import.meta.main) {
   startServer().catch((err) => {
     console.error('[Server] Failed to start:', err);
     process.exit(1);

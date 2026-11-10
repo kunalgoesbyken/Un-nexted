@@ -5,6 +5,8 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { BunPlugin } from 'bun';
+import { getRoutes, initRouter } from './router.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +24,28 @@ interface BuildOptions {
 }
 
 /**
+ * Expose every page as a lazily loaded chunk through the unnexted:pages module
+ */
+function pagesPlugin(): BunPlugin {
+  return {
+    name: 'unnexted-pages',
+    setup(build) {
+      build.onResolve({ filter: /^unnexted:pages$/ }, () => ({
+        path: 'unnexted:pages',
+        namespace: 'unnexted',
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'unnexted' }, () => {
+        const entries = getRoutes().map(
+          (route) =>
+            `${JSON.stringify(route.filePath)}: () => import(${JSON.stringify(path.resolve(route.filePath))})`
+        );
+        return { contents: `export default {${entries.join(',')}};`, loader: 'js' };
+      });
+    },
+  };
+}
+
+/**
  * Build the client bundle
  */
 export async function buildClient(options: BuildOptions = {}): Promise<void> {
@@ -29,11 +53,15 @@ export async function buildClient(options: BuildOptions = {}): Promise<void> {
 
   console.log('[Build] Starting client build...');
 
+  await initRouter();
+
   const buildConfig = {
     entrypoints: [ENTRY_POINT],
     outdir: OUT_DIR,
     target: 'browser' as const,
     format: 'esm' as const,
+    splitting: true,
+    plugins: [pagesPlugin()],
     minify,
     sourcemap: sourcemap ? ('external' as const) : false,
     naming: {
@@ -104,7 +132,7 @@ async function watchAndRebuild(config: any): Promise<void> {
 /**
  * CLI entry point
  */
-if (import.meta.path === Bun.resolveSync('./build.ts', import.meta.dir)) {
+if (import.meta.main) {
   const args = process.argv.slice(2);
   const options: BuildOptions = {
     minify: args.includes('--minify'),
