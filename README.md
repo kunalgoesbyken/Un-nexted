@@ -4,7 +4,7 @@
 
 **Un-nexted** is a raw implementation of the server-side rendering (SSR) pipeline that powers modern web frameworks. It strips away the complexity of production codebases to reveal the fundamental architecture: how a server turns React components into HTML strings, and how the browser "hydrates" that static HTML into an interactive app.
 
-![Project Screenshot](public/stage-1768329529929.png)
+![Un-nexted: the home page served by the hand-built SSR pipeline, with a hydrated counter](public/readme-card.webp)
 
 ##  Why I Built This
 
